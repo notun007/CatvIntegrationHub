@@ -53,20 +53,24 @@ public sealed class HscasController : ControllerBase
     [HttpPost("Authorize")]
     public Task<ActionResult<CasCommandResponse>> Authorize(AuthorizationRequest request) =>
         ExecuteCasCommand(() => _client.Authorization(request.CardId, request.ProductId, request.StartTime, request.EndTime),
-            request.CardId, SvCardStatusEnum.Authorize);
+            request.CardId, SvCardStatusEnum.Authorize,
+            productId: request.ProductId, startTime: request.StartTime, endTime: request.EndTime);
 
     [HttpPost("UnAuthorize")]
     public Task<ActionResult<CasCommandResponse>> UnAuthorize(AuthorizationRequest request) =>
         ExecuteCasCommand(() => _client.UnAuthorizationDeleteAuthorization(request.CardId, request.ProductId, request.StartTime, request.EndTime),
-            request.CardId, SvCardStatusEnum.Unauthorize);
+            request.CardId, SvCardStatusEnum.Unauthorize,
+            productId: request.ProductId, startTime: request.StartTime, endTime: request.EndTime);
 
     [HttpPost("ClearAuthorization")]
     public Task<ActionResult<CasCommandResponse>> ClearAuthorization(CardRequest request) =>
         ExecuteCasCommand(() => _client.ClearAuthorizationOfTerminal(request.CardId),
             request.CardId, SvCardStatusEnum.ClearAuthorization);
 
+    //Asad; Commented On 16-10-2026
+    //For future use: should be clear the use cases from sv then make it public
     [HttpPost("SetTerminalStatus")]
-    public Task<ActionResult<CasCommandResponse>> SetTerminalStatus(SetTerminalStatusRequest request) =>
+    private Task<ActionResult<CasCommandResponse>> SetTerminalStatus(SetTerminalStatusRequest request) =>
         ExecuteCasCommand(() => _client.SetTerminalStatus(request.CardId, request.Status!.Value),
             request.CardId, request.Status == 1 ? SvCardStatusEnum.ActiveTerminal : SvCardStatusEnum.InactiveTerminal);
 
@@ -76,7 +80,9 @@ public sealed class HscasController : ControllerBase
             request.CardId, SvCardStatusEnum.QueryAuthorization);
 
     private async Task<ActionResult<TResponse>> ExecuteCasCommand<TResponse>(Func<TResponse> command,
-        string cardId, SvCardStatusEnum status, string? chipId = null) where TResponse : CasCommandResponse
+        string cardId, SvCardStatusEnum status, string? chipId = null,
+        string? productId = null, DateTimeOffset? startTime = null, DateTimeOffset? endTime = null)
+        where TResponse : CasCommandResponse
     {
         TResponse response;
         try
@@ -110,7 +116,8 @@ public sealed class HscasController : ControllerBase
         try
         {
             // Finish recording even if the HTTP caller disconnects after CAS has succeeded.
-            await _recorder.RecordAsync(cardId, chipId, status, CancellationToken.None);
+            await _recorder.RecordAsync(cardId, chipId, status, productId, startTime, endTime,
+                requestHex: response.RequestHex, responseHex: response.ResponseHex, cancellationToken: CancellationToken.None);
         }
         catch (Exception ex)
         {

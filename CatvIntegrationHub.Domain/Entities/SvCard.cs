@@ -5,6 +5,11 @@ public sealed class SvCard
     public long Id { get; set; }
     public string CardId { get; set; } = string.Empty;
     public string? ChipId { get; set; }
+    public string? ProductId { get; set; }
+    public DateTimeOffset? StartTime { get; set; }
+    public DateTimeOffset? EndTime { get; set; }
+    public string? RequestHex { get; set; }
+    public string? ResponseHex { get; set; }
     public short SvCardStatusId { get; set; }
     public int CreatedBy { get; set; }
     public DateTime CreatedDate { get; set; }

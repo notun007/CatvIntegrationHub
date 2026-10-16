@@ -6,6 +6,10 @@
     <UserSecretsId>CatvIntegrationHub.Api-CasHub</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="6.0.36">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <ProjectReference Include="..\CatvIntegrationHub.Application\CatvIntegrationHub.Application.csproj" />
     <ProjectReference Include="..\CatvIntegrationHub.Infrastructure\CatvIntegrationHub.Infrastructure.csproj" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />

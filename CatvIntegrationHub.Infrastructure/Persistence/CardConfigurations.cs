@@ -13,6 +13,11 @@ internal sealed class SvCardConfiguration : IEntityTypeConfiguration<SvCard>
         builder.Property(x => x.Id).UseIdentityColumn();
         builder.Property(x => x.CardId).HasColumnType("varchar(50)").HasMaxLength(50).IsUnicode(false).IsRequired();
         builder.Property(x => x.ChipId).HasColumnType("varchar(50)").HasMaxLength(50).IsUnicode(false);
+        builder.Property(x => x.ProductId).HasColumnType("varchar(50)").HasMaxLength(50).IsUnicode(false);
+        builder.Property(x => x.StartTime).HasColumnType("datetimeoffset(7)");
+        builder.Property(x => x.EndTime).HasColumnType("datetimeoffset(7)");
+        builder.Property(x => x.RequestHex).HasColumnType("varchar(max)").IsUnicode(false);
+        builder.Property(x => x.ResponseHex).HasColumnType("varchar(max)").IsUnicode(false);
         builder.Property(x => x.SvCardStatusId).HasColumnType("smallint");
         builder.Property(x => x.CreatedDate).HasColumnType("datetime").HasDefaultValueSql("getdate()");
         builder.Property(x => x.UpdatedDate).HasColumnType("datetime");

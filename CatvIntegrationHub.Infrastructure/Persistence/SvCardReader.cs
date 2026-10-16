@@ -12,7 +12,8 @@ internal sealed class SvCardReader : ISvCardReader
 
     private static readonly Expression<Func<SvCard, SvCardDto>> Projection = card => new SvCardDto(
         card.Id, card.CardId, card.ChipId, card.SvCardStatusId, card.SvCardStatus.Name,
-        card.CreatedBy, card.CreatedDate, card.UpdatedBy, card.UpdatedDate);
+        card.CreatedBy, card.CreatedDate, card.UpdatedBy, card.UpdatedDate,
+        card.ProductId, card.StartTime, card.EndTime, card.RequestHex, card.ResponseHex);
 
     public async Task<PagedResult<SvCardDto>> GetCardsAsync(int page, int pageSize, CancellationToken cancellationToken)
     {

@@ -26,7 +26,7 @@ The checked-in connection string is empty by design. Do not put passwords into s
 
 ## Existing database
 
-Both tables must already exist in `CasHub`. Startup never calls `Migrate`, `EnsureCreated`, or `EnsureDeleted`. No migration scripts or changes to existing data are applied.
+Both tables must already exist in `CasHub`. Startup never calls `Migrate`, `EnsureCreated`, or `EnsureDeleted`. Startup never applies migrations automatically. Reviewed EF migrations can be applied explicitly as described below.
 
 `SvCards.Id` is a bigint identity; `SvCardStatuses.Id` is a manually assigned smallint. String columns are non-Unicode varchar(50). `CreatedDate` uses the existing SQL `getdate()` default (SQL server local time); it is not presented as UTC. Nullable columns and the non-cascading foreign key match the supplied DDL. CardId has no unique constraint in the supplied schema, so detail requests use the numeric primary key.
 
@@ -64,3 +64,30 @@ Invalid requests, transport errors, invalid CAS responses, and CAS results with 
 CAS and SQL Server cannot be committed atomically. If CAS succeeds but the save throws, HTTP 500 explicitly returns Success = false, CasSucceeded = true, DatabaseSaveConfirmed = false, the successful CasResponse, and a TraceId. The public message warns against automatic retries. A failed save acknowledgement can have an uncertain commit outcome, so check the database and correlated logs before manually repeating the operation. A client repeating a successful request will intentionally create another row; this schema has no idempotency key.
 
 Validation used local mock CAS responses, an HTTP TestServer and in-memory EF persistence: all eight status mappings, audit fields, one row per success, repeated calls, CAS rejections, input validation, transport failure, database save failure, and absence of automatic CAS retries passed. No live database rows or subscriber states were changed during these tests. SQL defaults and relational mapping were verified separately when the database layer was introduced.
+## Authorization details and migrations
+
+SvCards now includes nullable ProductId (varchar(50)), StartTime (datetimeoffset(7)) and EndTime (datetimeoffset(7)). Authorize and UnAuthorize store the client-supplied values after CAS succeeds. Other operation rows leave these columns null. Read DTOs include the fields. UnAuthorize records the original request dates even though its CAS packet uses the end time for both protocol timestamps. DateTimeOffset storage preserves the supplied offset.
+
+Migrations live in CatvIntegrationHub.Infrastructure/Persistence/Migrations. ExistingCasHubBaseline is intentionally a no-op for pre-existing tables and must not be used to provision an empty database. AddAuthorizationDetailsToSvCards adds only the three nullable columns. The corresponding model snapshots are checked in. The database receives an __EFMigrationsHistory table; the two existing SvCards rows were verified unchanged with null authorization details after applying the migrations on 2026-10-16.
+
+From the solution directory, use the pinned local EF Core 6 tool:
+
+```powershell
+dotnet tool restore
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+dotnet ef migrations list --project CatvIntegrationHub.Infrastructure --startup-project CatvIntegrationHub.Api
+dotnet ef database update --project CatvIntegrationHub.Infrastructure --startup-project CatvIntegrationHub.Api
+```
+
+The target connection comes from the usual configuration providers. A reviewed, idempotent deployment script is available at DatabaseScripts/AddAuthorizationDetailsToSvCards.sql. It is already applied to the supplied CasHub database. On another environment, confirm the two original tables exist and run the script against the correct CasHub database before deploying the updated API. Applying it again skips recorded migrations. Reverting the additive migration drops the new columns and their contents; no rollback is performed automatically.
+
+Local mock-CAS/HTTP/in-memory-EF checks verified the new values for both authorization operations, offset preservation, null fields for other active endpoints, read DTO output, failure behavior and the migration operations. The existing private SetTerminalStatus action was preserved. No live authorization commands or test card inserts were issued.
+
+EF migration management reference: https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/managing
+## CAS packet hex recording
+
+SvCards.RequestHex and SvCards.ResponseHex are nullable varchar(max) columns. Each successful CAS operation passes the actual CasCommandResponse.RequestHex and ResponseHex strings to the recorder, saving them unchanged in the same row as its status and authorization details. They are not reconstructed from request inputs. Card list and detail DTOs include both fields.
+
+Migration AddPacketHexToSvCards adds only these two columns. It was applied to CasHub on 2026-10-16; all four existing rows were preserved with null packet fields. DatabaseScripts/AddPacketHexToSvCards.sql is an idempotent incremental script for databases already baselined with AddAuthorizationDetailsToSvCards. There is no automatic startup migration or backfill of historical packet data.
+
+Successful-command-only recording, CreatedBy = 1, partial persistence failure responses and the existing private SetTerminalStatus action remain unchanged. Rejected CAS commands and transport failures still do not create rows. Local HTTP/mock CAS/in-memory EF checks verified exact packet persistence, 20,000-character values, nullable varchar(max) mappings, DTO output and existing error behavior. No live CAS commands or test data inserts were issued.
