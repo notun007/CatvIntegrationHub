@@ -1,4 +1,6 @@
 using System.Net.Sockets;
+using System.Text.Json;
+using Microsoft.Extensions.Options;
 using CatvIntegrationHub.Application.Cards;
 using CatvIntegrationHub.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -12,13 +14,15 @@ public sealed class HscasController : ControllerBase
     private readonly HscasClient _client;
     private readonly ISvCardOperationRecorder _recorder;
     private readonly ILogger<HscasController> _logger;
+    private readonly JsonSerializerOptions _jsonOptions;
 
     public HscasController(HscasClient client, ISvCardOperationRecorder recorder,
-        ILogger<HscasController> logger)
+        ILogger<HscasController> logger, IOptions<JsonOptions> jsonOptions)
     {
         _client = client;
         _recorder = recorder;
         _logger = logger;
+        _jsonOptions = jsonOptions.Value.JsonSerializerOptions;
     }
 
     [HttpGet("")]
@@ -117,7 +121,9 @@ public sealed class HscasController : ControllerBase
         {
             // Finish recording even if the HTTP caller disconnects after CAS has succeeded.
             await _recorder.RecordAsync(cardId, chipId, status, productId, startTime, endTime,
-                requestHex: response.RequestHex, responseHex: response.ResponseHex, cancellationToken: CancellationToken.None);
+                requestHex: response.RequestHex, responseHex: response.ResponseHex,
+                responseJson: JsonSerializer.Serialize(response, response.GetType(), _jsonOptions),
+                cancellationToken: CancellationToken.None);
         }
         catch (Exception ex)
         {

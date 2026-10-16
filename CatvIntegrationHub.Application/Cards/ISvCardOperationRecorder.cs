@@ -6,6 +6,6 @@ public interface ISvCardOperationRecorder
 {
     Task RecordAsync(string cardId, string? chipId, SvCardStatusEnum status,
         string? productId = null, DateTimeOffset? startTime = null, DateTimeOffset? endTime = null,
-        string? requestHex = null, string? responseHex = null,
+        string? requestHex = null, string? responseHex = null, string? responseJson = null,
         CancellationToken cancellationToken = default);
 }

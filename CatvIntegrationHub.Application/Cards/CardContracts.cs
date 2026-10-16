@@ -4,7 +4,7 @@ public sealed record SvCardDto(long Id, string CardId, string? ChipId,
     short SvCardStatusId, string StatusName, int CreatedBy, DateTime CreatedDate,
     int? UpdatedBy, DateTime? UpdatedDate,
     string? ProductId, DateTimeOffset? StartTime, DateTimeOffset? EndTime,
-    string? RequestHex, string? ResponseHex);
+    string? RequestHex, string? ResponseHex, string? ResponseJson);
 
 public sealed record SvCardStatusDto(short Id, string Name);
 

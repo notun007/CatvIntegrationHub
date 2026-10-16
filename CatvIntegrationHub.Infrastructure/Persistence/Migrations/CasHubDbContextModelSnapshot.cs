@@ -65,6 +65,9 @@ namespace CatvIntegrationHub.Infrastructure.Persistence.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(max)");
 
+                    b.Property<string>("ResponseJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTimeOffset?>("StartTime")
                         .HasColumnType("datetimeoffset(7)");
 

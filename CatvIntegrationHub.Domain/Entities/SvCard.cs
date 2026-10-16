@@ -10,6 +10,7 @@ public sealed class SvCard
     public DateTimeOffset? EndTime { get; set; }
     public string? RequestHex { get; set; }
     public string? ResponseHex { get; set; }
+    public string? ResponseJson { get; set; }
     public short SvCardStatusId { get; set; }
     public int CreatedBy { get; set; }
     public DateTime CreatedDate { get; set; }

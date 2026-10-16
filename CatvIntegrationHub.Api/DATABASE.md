@@ -91,3 +91,12 @@ SvCards.RequestHex and SvCards.ResponseHex are nullable varchar(max) columns. Ea
 Migration AddPacketHexToSvCards adds only these two columns. It was applied to CasHub on 2026-10-16; all four existing rows were preserved with null packet fields. DatabaseScripts/AddPacketHexToSvCards.sql is an idempotent incremental script for databases already baselined with AddAuthorizationDetailsToSvCards. There is no automatic startup migration or backfill of historical packet data.
 
 Successful-command-only recording, CreatedBy = 1, partial persistence failure responses and the existing private SetTerminalStatus action remain unchanged. Rejected CAS commands and transport failures still do not create rows. Local HTTP/mock CAS/in-memory EF checks verified exact packet persistence, 20,000-character values, nullable varchar(max) mappings, DTO output and existing error behavior. No live CAS commands or test data inserts were issued.
+## Full CAS response JSON
+
+SvCards.ResponseJson is a nullable nvarchar(max) column. Successful CAS POST operations serialize the original response object using the API's configured MVC JsonSerializerOptions and its runtime type, preserving camelCase properties and derived QueryAuthorization fields such as authorizations. The JSON is saved in the same SvCards row as the packet hex and authorization details. Card list and detail DTOs expose responseJson as a JSON string. HTTP response bodies themselves retain their existing shape.
+
+The successful-command-only rule still applies: rejected CAS commands, transport failures and validation errors do not create rows. The stored value is the successful CAS response body, not a later database-save error wrapper, HTTP headers or status code. Existing records are left null; historical response objects are not reconstructed from hex.
+
+Migration AddResponseJsonToSvCards adds only ResponseJson and was applied to CasHub on 2026-10-16. DatabaseScripts/AddResponseJsonToSvCards.sql is an incremental idempotent script for databases already at AddPacketHexToSvCards. Startup does not automatically migrate. Deploy the rebuilt API after the schema is ready; retain the IIS database connection configuration.
+
+Local HTTP/mock CAS/in-memory EF checks verified that stored responseJson exactly matches each active endpoint's HTTP JSON, including a nonempty authorization collection, camelCase settings, long Unicode content, DTO projection and existing failure behavior. No live CAS commands or test inserts were issued. The private SetTerminalStatus action remains private.
