@@ -116,65 +116,144 @@ public sealed class HscasClient
 
     public QueryAuthorizationResponse QueryAuthorizationOfCertainTerminal(string cardId)
     {
-        string cardIdHex = ConvertCardIdToHex(cardId);
-
-        string sessionIdHex = GetNextSessionIdHex();
-        string requestHex = BuildCasPacket(sessionIdHex, "20", "0004", cardIdHex);
-        byte[] request = ConvertHexToByteArray(requestHex);
-
-        using Socket socket = CreateConnectedSocket();
-        SendAll(socket, request);
-        CasResponse response = ReadCasResponse(socket);
-        ValidateResponseHeader(response, Convert.ToUInt16(sessionIdHex, 16), 0x20);
-
-        uint result = ReadResultCode(response.Body);
-        QueryAuthorizationResponse apiResponse = new()
+        QueryAuthorizationResponse diagnostic = new() { CommandName = "QueryAuthorizationOfCertainTerminal" };
+        string phase = "validate";
+        QueryAuthorizationResponse Fail(string code, string reason, int httpStatus)
         {
-            CommandName = "QueryAuthorizationOfCertainTerminal",
-            RequestHex = requestHex,
-            ResponseHex = BytesToHex(response.FullResponse),
-            BodyHex = BytesToHex(response.Body),
-            ResultHex = result.ToString("X8"),
-            ResultDecimal = result,
-            ResultMeaning = result == 0 ? "SUCCESS" : GetCasError(result),
-            Success = result == 0
-        };
+            diagnostic.Success = false;
+            diagnostic.ReasonCode = code;
+            diagnostic.Reason = reason;
+            diagnostic.HttpStatusCode = httpStatus;
+            return diagnostic;
+        }
+        try
+        {
+            if (string.IsNullOrWhiteSpace(cardId))
+                return Fail("QA100", "Card ID is missing.", 400);
+            string normalized = cardId.Trim();
+            if (normalized.Any(c => c < '0' || c > '9'))
+                return Fail("QA101", "Card ID must contain decimal digits only.", 400);
+            if (!uint.TryParse(normalized, out uint id) || id == 0 || id == uint.MaxValue)
+                return Fail("QA102", "Card ID must be between 1 and 4294967294.", 400);
+            string cardIdHex = id.ToString("X8");
 
-        if (response.Body.Length >= 6)
-            apiResponse.ReturnAmount = ReadUInt16BE(response.Body, 4);
+            string sessionIdHex = GetNextSessionIdHex();
+            string requestHex = BuildCasPacket(sessionIdHex, "20", "0004", cardIdHex);
+            diagnostic.RequestHex = requestHex;
+            byte[] request = ConvertHexToByteArray(requestHex);
 
-        if (result != 0)
+            if (!IPAddress.TryParse(_options.IpAddress, out var address) || _options.Port is < 1 or > 65535
+                || _options.SendTimeoutMilliseconds <= 0 || _options.ReceiveTimeoutMilliseconds <= 0)
+                return Fail("QA500", "CAS connection configuration is invalid.", 500);
+            using Socket socket = new(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+            {
+                SendTimeout = _options.SendTimeoutMilliseconds,
+                ReceiveTimeout = _options.ReceiveTimeoutMilliseconds
+            };
+            phase = "connect";
+            using (var timeout = new CancellationTokenSource(_options.SendTimeoutMilliseconds))
+                socket.ConnectAsync(address, _options.Port, timeout.Token).AsTask().GetAwaiter().GetResult();
+            phase = "send";
+            SendAll(socket, request);
+            phase = "receive";
+            CasResponse response = ReadCasResponse(socket);
+            diagnostic.ResponseHex = BytesToHex(response.FullResponse);
+            diagnostic.BodyHex = BytesToHex(response.Body);
+            if (response.SessionId != Convert.ToUInt16(sessionIdHex, 16))
+                return Fail("QA401", "CAS response session does not match the request.", 502);
+            if (response.CasVersion != 2)
+                return Fail("QA403", "CAS response version is unsupported.", 502);
+            if (response.CommandType != 0x20)
+                return Fail("QA402", "CAS response command does not match the request.", 502);
+
+            uint result = ReadResultCode(response.Body);
+            QueryAuthorizationResponse apiResponse = new()
+            {
+                CommandName = "QueryAuthorizationOfCertainTerminal",
+                RequestHex = requestHex,
+                ResponseHex = BytesToHex(response.FullResponse),
+                BodyHex = BytesToHex(response.Body),
+                ResultHex = result.ToString("X8"),
+                ResultDecimal = result,
+                ResultMeaning = result == 0 ? "SUCCESS" : GetCasError(result),
+                Success = result == 0
+            };
+
+            if (response.Body.Length >= 6)
+                apiResponse.ReturnAmount = ReadUInt16BE(response.Body, 4);
+
+            diagnostic = apiResponse;
+            if (result != 0)
+            {
+                string code = result switch
+                {
+                    0xD0000002 => "QA201", 0xD0000004 => "QA202", 0xD0000005 => "QA203",
+                    0xD000000A => "QA204", 0xD000001E => "QA205", 0xFFFFFFFF => "QA206",
+                    0xD000001B => "QA207", 0xD000000B => "QA208", 0xD000001F => "QA209",
+                    0xD0000020 => "QA210", 0xD0000022 => "QA211", _ => "QA299"
+                };
+                return Fail(code, apiResponse.ResultMeaning, 200);
+            }
+
+            if (response.Body.Length < 6)
+                return Fail("QA404", "Successful query response is missing the authorization count.", 502);
+
+            ushort returnAmount = ReadUInt16BE(response.Body, 4);
+            int expectedBodyLength = 6 + (returnAmount * 10);
+            if (response.Body.Length != expectedBodyLength)
+                return Fail("QA404", "Authorization count does not match the response length.", 502);
+
+            int offset = 6;
+            for (int i = 0; i < returnAmount; i++)
+            {
+                ushort productId = ReadUInt16BE(response.Body, offset);
+                uint beginUnix = ReadUInt32BE(response.Body, offset + 2);
+                uint endUnix = ReadUInt32BE(response.Body, offset + 6);
+
+                apiResponse.Authorizations.Add(new AuthorizationRecord
+                {
+                    ProductId = productId,
+                    ProductIdHex = productId.ToString("X4"),
+                    BeginHex = beginUnix.ToString("X8"),
+                    BeginUtc = DateTimeOffset.FromUnixTimeSeconds(beginUnix),
+                    EndHex = endUnix.ToString("X8"),
+                    EndUtc = DateTimeOffset.FromUnixTimeSeconds(endUnix)
+                });
+
+                offset += 10;
+            }
+
+            // HSCAS section 4.3: begin < end is authorization; begin >= end is un-authorization.
+            // A successful query can return retained un-authorization records. Keep the raw list intact.
+            bool hasAuthorizationPeriods = apiResponse.Authorizations.Any(record => record.BeginUtc < record.EndUtc);
+            apiResponse.ReasonCode = hasAuthorizationPeriods ? "QA000" : "QA001";
+            apiResponse.Reason = hasAuthorizationPeriods
+                ? "Account is open with authorization periods; check their dates for current validity."
+                : returnAmount == 0
+                    ? "Account is open without authorization records."
+                    : "Account is open; only un-authorization records were returned.";
             return apiResponse;
 
-        if (response.Body.Length < 6)
-            throw new InvalidDataException("Successful query response is missing the 2-byte ReturnAmount field.");
-
-        ushort returnAmount = ReadUInt16BE(response.Body, 4);
-        int expectedBodyLength = 6 + (returnAmount * 10);
-        if (response.Body.Length != expectedBodyLength)
-            throw new InvalidDataException($"Invalid authorization response length. ReturnAmount={returnAmount} requires {expectedBodyLength} body bytes, but CAS returned {response.Body.Length}.");
-
-        int offset = 6;
-        for (int i = 0; i < returnAmount; i++)
-        {
-            ushort productId = ReadUInt16BE(response.Body, offset);
-            uint beginUnix = ReadUInt32BE(response.Body, offset + 2);
-            uint endUnix = ReadUInt32BE(response.Body, offset + 6);
-
-            apiResponse.Authorizations.Add(new AuthorizationRecord
-            {
-                ProductId = productId,
-                ProductIdHex = productId.ToString("X4"),
-                BeginHex = beginUnix.ToString("X8"),
-                BeginUtc = DateTimeOffset.FromUnixTimeSeconds(beginUnix),
-                EndHex = endUnix.ToString("X8"),
-                EndUtc = DateTimeOffset.FromUnixTimeSeconds(endUnix)
-            });
-
-            offset += 10;
         }
-
-        return apiResponse;
+        catch (OperationCanceledException)
+        { return Fail("QA301", "CAS connection timed out.", 504); }
+        catch (SocketException ex)
+        {
+            var (code, reason) = ex.SocketErrorCode switch
+            {
+                SocketError.ConnectionRefused => ("QA300", "CAS connection was refused."),
+                SocketError.TimedOut when phase == "connect" => ("QA301", "CAS connection timed out."),
+                SocketError.TimedOut when phase == "receive" => ("QA303", "Timed out waiting for CAS response."),
+                SocketError.HostUnreachable or SocketError.NetworkUnreachable or SocketError.NetworkDown => ("QA302", "CAS host or network is unreachable."),
+                SocketError.ConnectionReset or SocketError.ConnectionAborted => ("QA305", "CAS connection was reset."),
+                _ => ("QA306", "CAS transport failed during " + phase + ".")
+            };
+            return Fail(code, reason, code is "QA301" or "QA303" ? 504 : 502);
+        }
+        catch (InvalidDataException)
+        { return Fail("QA400", "CAS response packet is malformed.", 502); }
+        catch (IOException)
+        { return Fail("QA304", "CAS connection closed before the exchange completed.", 502); }
     }
 
     private CasCommandResponse SendCasCommand(string commandName, string requestHex)

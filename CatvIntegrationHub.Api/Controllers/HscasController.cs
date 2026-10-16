@@ -79,6 +79,7 @@ public sealed class HscasController : ControllerBase
             request.CardId, request.Status == 1 ? SvCardStatusEnum.ActiveTerminal : SvCardStatusEnum.InactiveTerminal);
 
     [HttpPost("QueryAuthorization")]
+    [QueryAuthorizationDiagnosticsFilter]
     public Task<ActionResult<QueryAuthorizationResponse>> QueryAuthorization(CardRequest request) =>
         ExecuteCasCommand(() => _client.QueryAuthorizationOfCertainTerminal(request.CardId),
             request.CardId, SvCardStatusEnum.QueryAuthorization);
@@ -114,6 +115,9 @@ public sealed class HscasController : ControllerBase
             return StatusCode(StatusCodes.Status502BadGateway, new { Error = ex.Message });
         }
 
+        if (response is QueryAuthorizationResponse query && query.HttpStatusCode != 200)
+            return StatusCode(query.HttpStatusCode, query);
+
         if (!response.Success)
             return Ok(response);
 
@@ -129,6 +133,20 @@ public sealed class HscasController : ControllerBase
         {
             _logger.LogError(ex, "CAS succeeded but SvCards persistence was not confirmed for status {StatusId}. TraceId: {TraceId}",
                 (short)status, HttpContext?.TraceIdentifier);
+            if (response is QueryAuthorizationResponse queryResponse)
+                return StatusCode(500, new
+                {
+                    Error = "CAS command succeeded, but saving the SvCards record could not be confirmed. Do not automatically retry this command.",
+                    Success = false,
+                    Status = queryResponse.Status,
+                    ReasonCode = queryResponse.ReasonCode,
+                    Reason = queryResponse.Reason,
+                    PersistenceReasonCode = "QA501",
+                    CasSucceeded = true,
+                    DatabaseSaveConfirmed = false,
+                    CasResponse = response,
+                    TraceId = HttpContext?.TraceIdentifier
+                });
             return StatusCode(StatusCodes.Status500InternalServerError, new
             {
                 Error = "CAS command succeeded, but saving the SvCards record could not be confirmed. Do not automatically retry this command.",

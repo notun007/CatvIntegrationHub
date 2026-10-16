@@ -37,6 +37,13 @@ public class CasCommandResponse
 
 public sealed class QueryAuthorizationResponse : CasCommandResponse
 {
+    public string Status => Success ? "Success" : "Failure";
+    public string ReasonCode { get; set; } = "QA599";
+    public string Reason { get; set; } = "Unexpected internal error.";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int HttpStatusCode { get; set; } = 200;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Error => HttpStatusCode >= 400 ? Reason : null;
     public ushort ReturnAmount { get; set; }
     public List<AuthorizationRecord> Authorizations { get; set; } = new();
 }
@@ -49,4 +56,6 @@ public sealed class AuthorizationRecord
     public DateTimeOffset BeginUtc { get; set; }
     public string EndHex { get; set; } = string.Empty;
     public DateTimeOffset EndUtc { get; set; }
+    // Record type per HSCAS section 4.3; this does not indicate current time validity.
+    public string AuthorizationStatus => BeginUtc < EndUtc ? "Authorized" : "Unauthorized";
 }
