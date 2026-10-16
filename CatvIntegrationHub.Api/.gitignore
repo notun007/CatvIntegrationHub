@@ -1,0 +1,6 @@
+**/bin/
+**/obj/
+.vs/
+*.csproj.user
+*.pubxml.user
+appsettings.Local.json
