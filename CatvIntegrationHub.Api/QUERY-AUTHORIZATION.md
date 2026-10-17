@@ -1,6 +1,11 @@
 # Query Authorization diagnostic contract
 
-Only POST /QueryAuthorization adds `status`, `reasonCode`, and `reason`.
+POST /QueryAuthorization adds `status`, `reasonCode`, and `reason` with QA codes.
+POST /OpenAccount has a separate OA diagnostic contract documented in OPEN-ACCOUNT.md.
+POST /CloseAccount has a separate CA diagnostic contract documented in CLOSE-ACCOUNT.md.
+POST /Authorize and /UnAuthorize have AU/UA diagnostic contracts documented in AUTHORIZATION.md.
+POST /ClearAuthorization has a CL diagnostic contract documented in CLEAR-AUTHORIZATION.md.
+The private SetTerminalStatus action has a TS diagnostic contract documented in SET-TERMINAL-STATUS.md.
 All existing response properties, authorization records and raw CAS result values remain.
 `status` is Success only for a fully validated CAS success packet, regardless of whether its authorization list is empty.
 A failed connection cannot establish whether a card is registered or authorized. No automatic retry is performed.

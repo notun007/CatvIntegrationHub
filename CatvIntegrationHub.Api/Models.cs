@@ -35,6 +35,61 @@ public class CasCommandResponse
     public bool Success { get; set; }
 }
 
+public sealed class OpenAccountResponse : CasCommandResponse
+{
+    public string Status => Success ? "Success" : "Failure";
+    public string ReasonCode { get; set; } = "OA599";
+    public string Reason { get; set; } = "Unexpected internal error.";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int HttpStatusCode { get; set; } = 200;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Error => HttpStatusCode >= 400 ? Reason : null;
+}
+
+public sealed class CloseAccountResponse : CasCommandResponse
+{
+    public string Status => Success ? "Success" : "Failure";
+    public string ReasonCode { get; set; } = "CA599";
+    public string Reason { get; set; } = "Unexpected internal error.";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int HttpStatusCode { get; set; } = 200;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Error => HttpStatusCode >= 400 ? Reason : null;
+}
+
+public sealed class AuthorizationCommandResponse : CasCommandResponse
+{
+    public string Status => Success ? "Success" : "Failure";
+    public string ReasonCode { get; set; } = "AU599";
+    public string Reason { get; set; } = "Unexpected internal error.";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int HttpStatusCode { get; set; } = 200;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Error => HttpStatusCode >= 400 ? Reason : null;
+}
+
+public sealed class ClearAuthorizationResponse : CasCommandResponse
+{
+    public string Status => Success ? "Success" : "Failure";
+    public string ReasonCode { get; set; } = "CL599";
+    public string Reason { get; set; } = "Unexpected internal error.";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int HttpStatusCode { get; set; } = 200;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Error => HttpStatusCode >= 400 ? Reason : null;
+}
+
+public sealed class SetTerminalStatusResponse : CasCommandResponse
+{
+    public string Status => Success ? "Success" : "Failure";
+    public string ReasonCode { get; set; } = "TS599";
+    public string Reason { get; set; } = "Unexpected internal error.";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int HttpStatusCode { get; set; } = 200;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Error => HttpStatusCode >= 400 ? Reason : null;
+}
+
 public sealed class QueryAuthorizationResponse : CasCommandResponse
 {
     public string Status => Success ? "Success" : "Failure";

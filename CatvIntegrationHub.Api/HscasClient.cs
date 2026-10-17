@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace CatvIntegrationHub.Api;
 
-public sealed class HscasClient
+public sealed partial class HscasClient
 {
     private const string CasVersionHex = "02";
     private readonly HscasOptions _options;
@@ -13,105 +13,6 @@ public sealed class HscasClient
     public HscasClient(IOptions<HscasOptions> options)
     {
         _options = options.Value;
-    }
-
-    public CasCommandResponse OpenAccount(string cardId, string chipId)
-    {
-        string cardIdHex = ConvertCardIdToHex(cardId);
-        ValidateHex(chipId, 16, nameof(chipId));
-
-        DateTimeOffset expiry = DateTimeOffset.UtcNow.AddDays(1);
-        string bodyHex = cardIdHex +
-                         expiry.ToUnixTimeSeconds().ToString("X8") +
-                         "0108" +
-                         chipId.ToUpperInvariant();
-
-        string requestHex = BuildCasPacket("1B", "0012", bodyHex);
-        return SendCasCommand("OpenAccount", requestHex);
-    }
-
-    public CasCommandResponse CloseAccount(string cardId)
-    {
-        string cardIdHex = ConvertCardIdToHex(cardId);
-        DateTimeOffset expiry = DateTimeOffset.UtcNow.AddMinutes(5);
-
-        string bodyHex = cardIdHex +
-                         "01" +
-                         expiry.ToUnixTimeSeconds().ToString("X8");
-
-        string requestHex = BuildCasPacket("15", "0009", bodyHex);
-        return SendCasCommand("CloseAccount", requestHex);
-    }
-
-    public CasCommandResponse Authorization(string cardId, string productId, DateTimeOffset startTime, DateTimeOffset endTime)
-    {
-        string cardIdHex = ConvertCardIdToHex(cardId);
-        string productIdHex = ConvertProductIdToHex(productId);
-
-        if (endTime <= startTime)
-            throw new ArgumentException("endTime must be later than startTime.", nameof(endTime));
-
-        if (endTime <= DateTimeOffset.UtcNow)
-            throw new ArgumentException("endTime must be later than the current time.", nameof(endTime));
-
-        string bodyHex = BuildAuthorizationBody(
-            cardIdHex,
-            productIdHex,
-            startTime.ToUnixTimeSeconds().ToString("X8"),
-            endTime.ToUnixTimeSeconds().ToString("X8"));
-        string requestHex = BuildCasPacket("01", "0012", bodyHex);
-        return SendCasCommand("Authorization", requestHex);
-    }
-
-    public CasCommandResponse UnAuthorizationDeleteAuthorization(string cardId, string productId, DateTimeOffset startTime, DateTimeOffset endTime)
-    {
-        string cardIdHex = ConvertCardIdToHex(cardId);
-        string productIdHex = ConvertProductIdToHex(productId);
-
-        if (endTime <= startTime)
-            throw new ArgumentException("endTime must be later than startTime.", nameof(endTime));
-
-        if (endTime <= DateTimeOffset.UtcNow)
-            throw new ArgumentException("endTime must be later than the current time.", nameof(endTime));
-
-        string unAuthorizationTimeHex = endTime.ToUnixTimeSeconds().ToString("X8");
-        string bodyHex = BuildAuthorizationBody(cardIdHex, productIdHex, unAuthorizationTimeHex, unAuthorizationTimeHex);
-        string requestHex = BuildCasPacket("01", "0012", bodyHex);
-        return SendCasCommand("UnAuthorizationDeleteAuthorization", requestHex);
-    }
-
-    public CasCommandResponse ClearAuthorizationOfTerminal(string cardId)
-    {
-        string cardIdHex = ConvertCardIdToHex(cardId);
-
-        string bodyHex = cardIdHex +
-                         "01";
-
-        string requestHex = BuildCasPacket("1F", "0005", bodyHex);
-        return SendCasCommand("ClearAuthorizationOfTerminal", requestHex);
-    }
-
-    public CasCommandResponse SetTerminalStatus(string cardId, int status)
-    {
-        if (status is not (0 or 1))
-            throw new ArgumentOutOfRangeException(nameof(status), "status must be 0 (inactivate) or 1 (activate).");
-
-        string cardIdHex = ConvertCardIdToHex(cardId);
-
-        DateTimeOffset expiry = DateTimeOffset.UtcNow.AddDays(3);
-        
-        if (status == 1)
-        {
-            expiry = DateTimeOffset.UtcNow.AddDays(3);
-        }
-
-        string bodyHex = cardIdHex +
-                         "01" +
-                         status.ToString("X2") +
-                         expiry.ToUnixTimeSeconds().ToString("X8");
-
-        string requestHex = BuildCasPacket("0B", "000A", bodyHex);
-        return SendCasCommand("SetTerminalStatus", requestHex);
     }
 
     public QueryAuthorizationResponse QueryAuthorizationOfCertainTerminal(string cardId)
@@ -495,6 +396,7 @@ public sealed class HscasClient
             0xD0000005 => "Data packet length incorrect",
             0xD000000A => "Terminal ID cannot be 0",
             0xD000000B => "Expired time is incorrect",
+            0xD000000F => "Terminal status must be 0 (inactivate) or 1 (activate)",
             0xD000001B => "Terminal ID cannot be FFFFFFFF",
             0xD000001E => "Terminal account is not opened",
             0xD000001F => "Chip ID length must be 8",

@@ -45,36 +45,42 @@ public sealed class HscasController : ControllerBase
     }
 
     [HttpPost("OpenAccount")]
-    public Task<ActionResult<CasCommandResponse>> OpenAccount(OpenAccountRequest request) =>
+    [OpenAccountDiagnosticsFilter]
+    public Task<ActionResult<OpenAccountResponse>> OpenAccount(OpenAccountRequest request) =>
         ExecuteCasCommand(() => _client.OpenAccount(request.CardId, request.ChipId),
             request.CardId, SvCardStatusEnum.OpenAccount, request.ChipId);
 
     [HttpPost("CloseAccount")]
-    public Task<ActionResult<CasCommandResponse>> CloseAccount(CardRequest request) =>
+    [CloseAccountDiagnosticsFilter]
+    public Task<ActionResult<CloseAccountResponse>> CloseAccount(CardRequest request) =>
         ExecuteCasCommand(() => _client.CloseAccount(request.CardId),
             request.CardId, SvCardStatusEnum.CloseAccount);
 
     [HttpPost("Authorize")]
-    public Task<ActionResult<CasCommandResponse>> Authorize(AuthorizationRequest request) =>
+    [AuthorizationDiagnosticsFilter]
+    public Task<ActionResult<AuthorizationCommandResponse>> Authorize(AuthorizationRequest request) =>
         ExecuteCasCommand(() => _client.Authorization(request.CardId, request.ProductId, request.StartTime, request.EndTime),
             request.CardId, SvCardStatusEnum.Authorize,
             productId: request.ProductId, startTime: request.StartTime, endTime: request.EndTime);
 
     [HttpPost("UnAuthorize")]
-    public Task<ActionResult<CasCommandResponse>> UnAuthorize(AuthorizationRequest request) =>
+    [AuthorizationDiagnosticsFilter(true)]
+    public Task<ActionResult<AuthorizationCommandResponse>> UnAuthorize(AuthorizationRequest request) =>
         ExecuteCasCommand(() => _client.UnAuthorizationDeleteAuthorization(request.CardId, request.ProductId, request.StartTime, request.EndTime),
             request.CardId, SvCardStatusEnum.Unauthorize,
             productId: request.ProductId, startTime: request.StartTime, endTime: request.EndTime);
 
     [HttpPost("ClearAuthorization")]
-    public Task<ActionResult<CasCommandResponse>> ClearAuthorization(CardRequest request) =>
+    [ClearAuthorizationDiagnosticsFilter]
+    public Task<ActionResult<ClearAuthorizationResponse>> ClearAuthorization(CardRequest request) =>
         ExecuteCasCommand(() => _client.ClearAuthorizationOfTerminal(request.CardId),
             request.CardId, SvCardStatusEnum.ClearAuthorization);
 
     //Asad; Commented On 16-10-2026
     //For future use: should be clear the use cases from sv then make it public
     [HttpPost("SetTerminalStatus")]
-    private Task<ActionResult<CasCommandResponse>> SetTerminalStatus(SetTerminalStatusRequest request) =>
+    [SetTerminalStatusDiagnosticsFilter]
+    private Task<ActionResult<SetTerminalStatusResponse>> SetTerminalStatus(SetTerminalStatusRequest request) =>
         ExecuteCasCommand(() => _client.SetTerminalStatus(request.CardId, request.Status!.Value),
             request.CardId, request.Status == 1 ? SvCardStatusEnum.ActiveTerminal : SvCardStatusEnum.InactiveTerminal);
 
@@ -115,6 +121,21 @@ public sealed class HscasController : ControllerBase
             return StatusCode(StatusCodes.Status502BadGateway, new { Error = ex.Message });
         }
 
+        if (response is SetTerminalStatusResponse terminal && terminal.HttpStatusCode != 200)
+            return StatusCode(terminal.HttpStatusCode, terminal);
+
+        if (response is ClearAuthorizationResponse clearing && clearing.HttpStatusCode != 200)
+            return StatusCode(clearing.HttpStatusCode, clearing);
+
+        if (response is AuthorizationCommandResponse authorization && authorization.HttpStatusCode != 200)
+            return StatusCode(authorization.HttpStatusCode, authorization);
+
+        if (response is CloseAccountResponse closing && closing.HttpStatusCode != 200)
+            return StatusCode(closing.HttpStatusCode, closing);
+
+        if (response is OpenAccountResponse opening && opening.HttpStatusCode != 200)
+            return StatusCode(opening.HttpStatusCode, opening);
+
         if (response is QueryAuthorizationResponse query && query.HttpStatusCode != 200)
             return StatusCode(query.HttpStatusCode, query);
 
@@ -133,6 +154,79 @@ public sealed class HscasController : ControllerBase
         {
             _logger.LogError(ex, "CAS succeeded but SvCards persistence was not confirmed for status {StatusId}. TraceId: {TraceId}",
                 (short)status, HttpContext?.TraceIdentifier);
+            if (response is SetTerminalStatusResponse terminalResponse)
+                return StatusCode(500, new
+                {
+                    Error = "CAS command succeeded, but saving the SvCards record could not be confirmed. Do not automatically retry this command.",
+                    Success = false,
+                    Status = "Failure",
+                    ReasonCode = "TS501",
+                    Reason = "CAS applied the terminal status, but saving the SvCards record could not be confirmed. Do not automatically retry.",
+                    PersistenceReasonCode = "TS501",
+                    CasSucceeded = true,
+                    DatabaseSaveConfirmed = false,
+                    CasResponse = terminalResponse,
+                    TraceId = HttpContext?.TraceIdentifier
+                });
+            if (response is ClearAuthorizationResponse clearResponse)
+                return StatusCode(500, new
+                {
+                    Error = "CAS command succeeded, but saving the SvCards record could not be confirmed. Do not automatically retry this command.",
+                    Success = false,
+                    Status = "Failure",
+                    ReasonCode = "CL501",
+                    Reason = "CAS cleared the authorizations, but saving the SvCards record could not be confirmed. Do not automatically retry.",
+                    PersistenceReasonCode = "CL501",
+                    CasSucceeded = true,
+                    DatabaseSaveConfirmed = false,
+                    CasResponse = clearResponse,
+                    TraceId = HttpContext?.TraceIdentifier
+                });
+            if (response is AuthorizationCommandResponse authorizationResponse)
+            {
+                string prefix = status == SvCardStatusEnum.Unauthorize ? "UA" : "AU";
+                return StatusCode(500, new
+                {
+                    Error = "CAS command succeeded, but saving the SvCards record could not be confirmed. Do not automatically retry this command.",
+                    Success = false,
+                    Status = "Failure",
+                    ReasonCode = prefix + "501",
+                    Reason = "CAS applied the command, but saving the SvCards record could not be confirmed. Do not automatically retry.",
+                    PersistenceReasonCode = prefix + "501",
+                    CasSucceeded = true,
+                    DatabaseSaveConfirmed = false,
+                    CasResponse = authorizationResponse,
+                    TraceId = HttpContext?.TraceIdentifier
+                });
+            }
+            if (response is CloseAccountResponse closeResponse)
+                return StatusCode(500, new
+                {
+                    Error = "CAS command succeeded, but saving the SvCards record could not be confirmed. Do not automatically retry this command.",
+                    Success = false,
+                    Status = "Failure",
+                    ReasonCode = "CA501",
+                    Reason = "Account closed in CAS, but saving the SvCards record could not be confirmed. Do not automatically retry.",
+                    PersistenceReasonCode = "CA501",
+                    CasSucceeded = true,
+                    DatabaseSaveConfirmed = false,
+                    CasResponse = closeResponse,
+                    TraceId = HttpContext?.TraceIdentifier
+                });
+            if (response is OpenAccountResponse openResponse)
+                return StatusCode(500, new
+                {
+                    Error = "CAS command succeeded, but saving the SvCards record could not be confirmed. Do not automatically retry this command.",
+                    Success = false,
+                    Status = "Failure",
+                    ReasonCode = "OA501",
+                    Reason = "Account opened in CAS, but saving the SvCards record could not be confirmed. Do not automatically retry.",
+                    PersistenceReasonCode = "OA501",
+                    CasSucceeded = true,
+                    DatabaseSaveConfirmed = false,
+                    CasResponse = openResponse,
+                    TraceId = HttpContext?.TraceIdentifier
+                });
             if (response is QueryAuthorizationResponse queryResponse)
                 return StatusCode(500, new
                 {
