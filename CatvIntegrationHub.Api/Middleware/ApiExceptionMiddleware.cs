@@ -25,6 +25,15 @@ public sealed class ApiExceptionMiddleware
             bool missingConnection = ex is MissingDatabaseConfigurationException;
             context.Response.Clear();
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            if (context.Request.Path.Equals("/ValidateCard", StringComparison.OrdinalIgnoreCase))
+            {
+                await context.Response.WriteAsJsonAsync(new ValidateCardResponse
+                {
+                    ReasonCode = missingConnection ? "VC500" : "VC599",
+                    Reason = missingConnection ? "Required database configuration is missing." : "Unexpected internal error."
+                });
+                return;
+            }
             bool isOpenAccount = context.Request.Path.Equals("/OpenAccount", StringComparison.OrdinalIgnoreCase);
             bool isCloseAccount = context.Request.Path.Equals("/CloseAccount", StringComparison.OrdinalIgnoreCase);
             bool isAuthorize = context.Request.Path.Equals("/Authorize", StringComparison.OrdinalIgnoreCase);

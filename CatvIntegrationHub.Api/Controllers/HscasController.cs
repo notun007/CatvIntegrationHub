@@ -9,7 +9,7 @@ namespace CatvIntegrationHub.Api.Controllers;
 
 [ApiController]
 [Route("")]
-public sealed class HscasController : ControllerBase
+public sealed partial class HscasController : ControllerBase
 {
     private readonly HscasClient _client;
     private readonly ISvCardOperationRecorder _recorder;
@@ -39,7 +39,8 @@ public sealed class HscasController : ControllerBase
                 "POST /UnAuthorize",
                 "POST /ClearAuthorization",
                 "POST /SetTerminalStatus",
-                "POST /QueryAuthorization"
+                "POST /QueryAuthorization",
+                "POST /ValidateCard"
             }
         });
     }

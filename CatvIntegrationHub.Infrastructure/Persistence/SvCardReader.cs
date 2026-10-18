@@ -9,7 +9,6 @@ internal sealed class SvCardReader : ISvCardReader
 {
     private readonly CasHubDbContext _db;
     public SvCardReader(CasHubDbContext db) => _db = db;
-
     private static readonly Expression<Func<SvCard, SvCardDto>> Projection = card => new SvCardDto(
         card.Id, card.CardId, card.ChipId, card.SvCardStatusId, card.SvCardStatus.Name,
         card.CreatedBy, card.CreatedDate, card.UpdatedBy, card.UpdatedDate,

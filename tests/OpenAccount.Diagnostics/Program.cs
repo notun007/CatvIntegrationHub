@@ -180,6 +180,8 @@ foreach (int terminalStatus in new[] { 0, 1 })
     int terminalChecks = await TerminalStatusChecks.RunAsync(http, casOptions, recorder, terminalStatus);
     Console.WriteLine($"PASS: {terminalChecks} assertions across private SetTerminalStatus ({terminalStatus}), CAS packet, EMM, validation, transport, and persistence scenarios.");
 }
+int validationChecks = await ValidateCardChecks.RunAsync(http, casOptions, recorder);
+Console.WriteLine($"PASS: {validationChecks} assertions across ValidateCard sequencing, failure, response, and audit scenarios.");
 await app.StopAsync();
 
 sealed class RecordingStub : ISvCardOperationRecorder
@@ -188,12 +190,14 @@ sealed class RecordingStub : ISvCardOperationRecorder
     public string? LastJson { get; private set; }
     public SvCardStatusEnum LastStatus { get; private set; }
     public bool ThrowOnSave { get; set; }
+    public List<(SvCardStatusEnum Status, string? Json)> Records { get; } = new();
     public Task RecordAsync(string cardId, string? chipId, SvCardStatusEnum status,
         string? productId = null, DateTimeOffset? startTime = null, DateTimeOffset? endTime = null,
         string? requestHex = null, string? responseHex = null, string? responseJson = null,
         CancellationToken cancellationToken = default)
     {
         if (ThrowOnSave) throw new IOException("Simulated database failure.");
+        Records.Add((status, responseJson));
         Count++;
         LastJson = responseJson;
         LastStatus = status;
