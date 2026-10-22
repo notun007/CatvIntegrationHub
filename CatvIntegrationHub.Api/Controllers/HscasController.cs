@@ -34,6 +34,7 @@ public sealed partial class HscasController : ControllerBase
             Endpoints = new[]
             {
                 "POST /OpenAccount",
+                "POST /AddCard",
                 "POST /CloseAccount",
                 "POST /Authorize",
                 "POST /UnAuthorize",

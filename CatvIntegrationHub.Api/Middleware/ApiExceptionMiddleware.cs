@@ -34,7 +34,8 @@ public sealed class ApiExceptionMiddleware
                 });
                 return;
             }
-            bool isOpenAccount = context.Request.Path.Equals("/OpenAccount", StringComparison.OrdinalIgnoreCase);
+            bool isOpenAccount = context.Request.Path.Equals("/OpenAccount", StringComparison.OrdinalIgnoreCase)
+                || context.Request.Path.Equals("/AddCard", StringComparison.OrdinalIgnoreCase);
             bool isCloseAccount = context.Request.Path.Equals("/CloseAccount", StringComparison.OrdinalIgnoreCase);
             bool isAuthorize = context.Request.Path.Equals("/Authorize", StringComparison.OrdinalIgnoreCase);
             bool isUnAuthorize = context.Request.Path.Equals("/UnAuthorize", StringComparison.OrdinalIgnoreCase);
