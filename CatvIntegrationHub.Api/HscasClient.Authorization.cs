@@ -62,7 +62,12 @@ public sealed partial class HscasClient
             
             if (endTime <= DateTimeOffset.UtcNow)
                 return Fail("107", "endTime must be later than the current time.", 400);
-            
+
+            #region Farida
+            startTime = startTime.ToUniversalTime();
+            endTime = endTime.ToUniversalTime();
+            #endregion
+
             long beginUnix = startTime.ToUnixTimeSeconds();
             long endUnix = endTime.ToUnixTimeSeconds();
             
