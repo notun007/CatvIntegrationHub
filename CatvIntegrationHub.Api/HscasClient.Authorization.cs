@@ -34,22 +34,38 @@ public sealed partial class HscasClient
         {
             if (string.IsNullOrWhiteSpace(cardId))
                 return Fail("100", "Card ID is missing.", 400);
+
             string normalized = cardId.Trim();
+
             if (normalized.Any(c => c < '0' || c > '9'))
                 return Fail("101", "Card ID must contain decimal digits only.", 400);
+
             if (!uint.TryParse(normalized, out uint id) || id == 0 || id == uint.MaxValue)
                 return Fail("102", "Card ID must be between 1 and 4294967294.", 400);
+
             if (string.IsNullOrWhiteSpace(productId))
                 return Fail("104", "Product ID is missing.", 400);
+
             string productIdHex;
-            try { productIdHex = ConvertProductIdToHex(productId); }
-            catch (ArgumentException ex) { return Fail("105", ex.Message, 400); }
+            
+            try 
+            { 
+                productIdHex = ConvertProductIdToHex(productId); 
+            }
+            catch (ArgumentException ex) 
+            { 
+                return Fail("105", ex.Message, 400); 
+            }
+            
             if (endTime <= startTime)
                 return Fail("106", "endTime must be later than startTime.", 400);
+            
             if (endTime <= DateTimeOffset.UtcNow)
                 return Fail("107", "endTime must be later than the current time.", 400);
+            
             long beginUnix = startTime.ToUnixTimeSeconds();
             long endUnix = endTime.ToUnixTimeSeconds();
+            
             if (beginUnix < 0 || beginUnix > uint.MaxValue || endUnix > uint.MaxValue)
                 return Fail("108", "Start and end times must fit in unsigned 32-bit Unix seconds.", 400);
 
@@ -57,6 +73,7 @@ public sealed partial class HscasClient
             // Preserve existing un-authorization encoding: begin = end = requested endTime.
             string bodyHex = BuildAuthorizationBody(id.ToString("X8"), productIdHex,
                 (unauthorize ? endUnix : beginUnix).ToString("X8"), endUnix.ToString("X8"));
+
             string requestHex = BuildCasPacket(sessionIdHex, "01", "0012", bodyHex);
             diagnostic.RequestHex = requestHex;
 
@@ -69,25 +86,32 @@ public sealed partial class HscasClient
                 SendTimeout = _options.SendTimeoutMilliseconds,
                 ReceiveTimeout = _options.ReceiveTimeoutMilliseconds
             };
+
             phase = "connect";
             using (var timeout = new CancellationTokenSource(_options.SendTimeoutMilliseconds))
                 socket.ConnectAsync(address, _options.Port, timeout.Token).AsTask().GetAwaiter().GetResult();
+            
             phase = "send";
             SendAll(socket, ConvertHexToByteArray(requestHex));
             phase = "receive";
             CasResponse response = ReadCasResponse(socket);
             diagnostic.ResponseHex = BytesToHex(response.FullResponse);
             diagnostic.BodyHex = BytesToHex(response.Body);
+
             if (response.SessionId != Convert.ToUInt16(sessionIdHex, 16))
                 return Fail("401", "CAS response session does not match the request.", 502);
+            
             if (response.CasVersion != 2)
                 return Fail("403", "CAS response version is unsupported.", 502);
+            
             if (response.CommandType != 0x01)
                 return Fail("402", "CAS response command does not match the request.", 502);
+            
             uint result = ReadResultCode(response.Body);
             diagnostic.ResultHex = result.ToString("X8");
             diagnostic.ResultDecimal = result;
             diagnostic.ResultMeaning = result == 0 ? "SUCCESS" : GetCasError(result);
+            
             if (result != 0)
             {
                 string code = result switch
@@ -100,9 +124,11 @@ public sealed partial class HscasClient
                 return Fail(code, diagnostic.ResultMeaning, 200);
             }
 
+            
             // HSCAS section 4.3.2: Result, ReturnAmount, then ProductNumber/Desc_Len/Description.
             if (response.Body.Length < 5)
                 return Fail("404", "Successful authorization response is missing the returned-product count.", 502);
+            
             int offset = 5;
             int returnAmount = response.Body[4];
             for (int i = 0; i < returnAmount; i++)
@@ -115,6 +141,7 @@ public sealed partial class HscasClient
                     return Fail("404", "Returned product description is shorter than its declared length.", 502);
                 offset += descriptionLength;
             }
+            
             if (offset != response.Body.Length)
                 return Fail("404", "Authorization response contains unexpected trailing product data.", 502);
 
@@ -124,7 +151,9 @@ public sealed partial class HscasClient
             return diagnostic;
         }
         catch (OperationCanceledException)
-        { return Fail("301", "CAS connection timed out.", 504); }
+        { 
+            return Fail("301", "CAS connection timed out.", 504); }
+        
         catch (SocketException ex)
         {
             var (code, reason) = ex.SocketErrorCode switch
@@ -139,8 +168,11 @@ public sealed partial class HscasClient
             return Fail(code, reason, code is "301" or "303" ? 504 : 502);
         }
         catch (InvalidDataException)
-        { return Fail("400", "CAS response packet is malformed.", 502); }
+        { 
+            return Fail("400", "CAS response packet is malformed.", 502); }
         catch (IOException)
-        { return Fail("304", "CAS connection closed before the exchange completed.", 502); }
+        { 
+            return Fail("304", "CAS connection closed before the exchange completed.", 502); 
+        }
     }
 }
