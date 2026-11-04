@@ -12,7 +12,9 @@ public sealed record SetTerminalStatusRequest(
 public sealed record AuthorizationRequest(
     string CardId,
     string ProductId,
+    [property: System.Text.Json.Serialization.JsonConverter(typeof(ExplicitOffsetDateTimeConverter))]
     DateTimeOffset StartTime,
+    [property: System.Text.Json.Serialization.JsonConverter(typeof(ExplicitOffsetDateTimeConverter))]
     DateTimeOffset EndTime);
 
 public sealed class HscasOptions

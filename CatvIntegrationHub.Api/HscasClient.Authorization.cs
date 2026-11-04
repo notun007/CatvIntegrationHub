@@ -62,14 +62,15 @@ public sealed partial class HscasClient
             
             if (endTime <= DateTimeOffset.UtcNow)
                 return Fail("107", "endTime must be later than the current time.", 400);
-
-            #region Farida
-            startTime = startTime.ToUniversalTime();
-            endTime = endTime.ToUniversalTime();
-            #endregion
-
+                        
             long beginUnix = startTime.ToUnixTimeSeconds();
             long endUnix = endTime.ToUnixTimeSeconds();
+
+            // HSCAS stores whole Unix seconds; validate the actual encoded period.
+            if (endUnix <= beginUnix)
+                return Fail("106", "endTime must be later than startTime at whole-second precision.", 400);
+            if (endUnix <= DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+                return Fail("107", "endTime must be later than the current time at whole-second precision.", 400);
             
             if (beginUnix < 0 || beginUnix > uint.MaxValue || endUnix > uint.MaxValue)
                 return Fail("108", "Start and end times must fit in unsigned 32-bit Unix seconds.", 400);

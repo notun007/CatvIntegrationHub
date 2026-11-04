@@ -39,7 +39,8 @@ internal static class AuthorizationChecks
             return body;
         }
         async Task<JsonElement> Exchange(uint result, string code, int status = 200,
-            byte[]? returnedData = null, Func<byte[], byte[]>? mutate = null, string transport = "response", string? requestBody = null)
+            byte[]? returnedData = null, Func<byte[], byte[]>? mutate = null, string transport = "response", string? requestBody = null,
+            DateTimeOffset? expectedStart = null, DateTimeOffset? expectedEnd = null)
         {
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
@@ -60,8 +61,8 @@ internal static class AuthorizationChecks
                 }
                 Check(Convert.ToHexString(request.AsSpan(2, 4)) == "02010012", "Incorrect authorization command header.");
                 Check(Convert.ToHexString(request.AsSpan(6, 9)) == "800000010101000101", "Incorrect card/product/flag fields.");
-                Check(BinaryPrimitives.ReadUInt32BigEndian(request.AsSpan(15, 4)) == (unauthorize ? endTime : startTime).ToUnixTimeSeconds(), "Incorrect begin time or un-authorization encoding.");
-                Check(BinaryPrimitives.ReadUInt32BigEndian(request.AsSpan(19, 4)) == endTime.ToUnixTimeSeconds(), "Incorrect end time.");
+                Check(BinaryPrimitives.ReadUInt32BigEndian(request.AsSpan(15, 4)) == (unauthorize ? expectedEnd ?? endTime : expectedStart ?? startTime).ToUnixTimeSeconds(), "Incorrect begin time or un-authorization encoding.");
+                Check(BinaryPrimitives.ReadUInt32BigEndian(request.AsSpan(19, 4)) == (expectedEnd ?? endTime).ToUnixTimeSeconds(), "Incorrect end time.");
                 Check(request[23] == 0, "Description length must be zero.");
                 if (transport == "close") return;
                 if (transport == "timeout") { await Task.Delay(1200); return; }
@@ -97,6 +98,13 @@ internal static class AuthorizationChecks
         await Exchange(0, prefix + "000", returnedData: new byte[] { 2, 1, 1, 2, 0xAB, 0xCD, 1, 2, 1, 0xEF });
         await Exchange(0, prefix + "000", returnedData: new byte[] { 1, 1, 1, 0 });
         await Exchange(0, prefix + "000", requestBody: MakeRequest(product: "0x0101"));
+        // Equivalent offsets must encode the same instant, without a six-hour shift.
+        foreach (var offset in new[] { TimeSpan.FromHours(6), TimeSpan.FromHours(-5), TimeSpan.FromMinutes(345) })
+            await Exchange(0, prefix + "000", requestBody: MakeRequest(start: startTime.ToOffset(offset), end: endTime.ToOffset(offset)));
+        var nearStart = DateTimeOffset.UtcNow.AddMinutes(-5).ToOffset(TimeSpan.FromHours(6));
+        var nearEnd = DateTimeOffset.UtcNow.AddHours(2).ToOffset(TimeSpan.FromHours(6));
+        await Exchange(0, prefix + "000", requestBody: MakeRequest(start: nearStart, end: nearEnd),
+            expectedStart: nearStart, expectedEnd: nearEnd);
         foreach (var error in new (uint Result, string Code)[]
         {
             (0xD0000002, prefix + "201"), (0xD0000004, prefix + "202"), (0xD0000005, prefix + "203"),
@@ -131,7 +139,20 @@ internal static class AuthorizationChecks
             await Post(MakeRequest(product: product), 400, prefix + "105");
         await Post(MakeRequest(start: endTime, end: startTime), 400, prefix + "106");
         await Post(MakeRequest(start: endTime), 400, prefix + "106");
+        var sameSecond = DateTimeOffset.FromUnixTimeSeconds(endTime.ToUnixTimeSeconds());
+        await Post(MakeRequest(start: sameSecond.AddMilliseconds(100), end: sameSecond.AddMilliseconds(900)), 400, prefix + "106");
         await Post(MakeRequest(start: startTime.AddDays(-2), end: startTime), 400, prefix + "107");
+        await Post(MakeRequest(start: startTime.AddDays(-2).ToOffset(TimeSpan.FromHours(6)), end: startTime.ToOffset(TimeSpan.FromHours(6))), 400, prefix + "107");
+        await Post(MakeRequest(start: endTime.ToOffset(TimeSpan.FromHours(-5)), end: startTime.ToOffset(TimeSpan.FromHours(6))), 400, prefix + "106");
+        foreach (string field in new[] { "startTime", "endTime" })
+        {
+            foreach (string invalid in new[] { "2027-11-04T22:28:00", "2027-11-04", "2027-02-30T22:28:00+06:00", "2027-11-04T22:28:00+25:00" })
+            {
+                var values = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(validRequest)!;
+                values[field] = JsonSerializer.SerializeToElement(invalid);
+                await Post(JsonSerializer.Serialize(values), 400, prefix + "103");
+            }
+        }
         await Post(MakeRequest(start: DateTimeOffset.UnixEpoch.AddSeconds(-1)), 400, prefix + "108");
         await Post(MakeRequest(end: DateTimeOffset.FromUnixTimeSeconds((long)uint.MaxValue + 1)), 400, prefix + "108");
         await Post(validRequest.Replace("startTime", "unusedTime"), 400, prefix + "108");

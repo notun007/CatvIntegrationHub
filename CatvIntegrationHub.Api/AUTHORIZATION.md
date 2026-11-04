@@ -20,6 +20,12 @@ decimal in 1..4294967294; product ID must be nonzero and fit in two bytes (decim
 0x-prefixed hexadecimal, or hexadecimal containing letters). Input times must fit
 unsigned 32-bit Unix seconds to keep the command packet valid.
 
+Authorization dates must include `Z` or an explicit offset such as `+06:00`.
+Timezone-free or invalid timestamps return AU103/UA103 rather than using the
+API server's timezone. Equivalent offsets produce identical CAS timestamps.
+Ordering and expiry are also checked after conversion to whole Unix seconds,
+so fractional-second periods that collapse to one timestamp return AU106/UA106.
+
 Response session, CAS version (2), and command (01) must match. HSCAS section
 4.3.2 defines Result (4 bytes), ReturnAmount (1 byte), then ProductNumber (2 bytes),
 Desc_Len (1 byte), and Description for each returned product. Zero returned
