@@ -113,6 +113,8 @@ public sealed class AuthorizationRecord
     public DateTimeOffset BeginUtc { get; set; }
     public string EndHex { get; set; } = string.Empty;
     public DateTimeOffset EndUtc { get; set; }
+    public DateTimeOffset BeginLocal => BeginUtc.ToOffset(TimeSpan.FromHours(6));
+    public DateTimeOffset EndLocal => EndUtc.ToOffset(TimeSpan.FromHours(6));
     // Record type per HSCAS section 4.3; this does not indicate current time validity.
     public string AuthorizationStatus => BeginUtc < EndUtc ? "Authorized" : "Unauthorized";
 }

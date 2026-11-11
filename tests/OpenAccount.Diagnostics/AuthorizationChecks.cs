@@ -98,6 +98,27 @@ internal static class AuthorizationChecks
         await Exchange(0, prefix + "000", returnedData: new byte[] { 2, 1, 1, 2, 0xAB, 0xCD, 1, 2, 1, 0xEF });
         await Exchange(0, prefix + "000", returnedData: new byte[] { 1, 1, 1, 0 });
         await Exchange(0, prefix + "000", requestBody: MakeRequest(product: "0x0101"));
+        // Preserve this reported UTC value through HTTP binding, packet encoding and recording.
+        var reportedStart = new DateTimeOffset(2026, 12, 6, 11, 59, 59, TimeSpan.Zero);
+        var reportedEnd = reportedStart.AddDays(1);
+        foreach (string utcSuffix in new[] { "+00:00", "Z" })
+        {
+            string reportedRequest = JsonSerializer.Serialize(new
+            {
+                cardId = "2147483649", productId = "0x0001",
+                startTime = "2026-12-06T11:59:59" + utcSuffix,
+                endTime = "2026-12-07T11:59:59" + utcSuffix
+            });
+            // Exchange checks product 0x0101, independently of the date regression.
+            reportedRequest = reportedRequest.Replace("0x0001", "0x0101");
+            await Exchange(0, prefix + "000", requestBody: reportedRequest,
+                expectedStart: reportedStart, expectedEnd: reportedEnd);
+            Check(recorder.LastStartTime?.EqualsExact(reportedStart) == true,
+                "HTTP/controller must preserve 2026-12-06T11:59:59+00:00, including its UTC offset.");
+            Check(recorder.LastEndTime?.EqualsExact(reportedEnd) == true,
+                "HTTP/controller must preserve the end time and its UTC offset.");
+            Console.WriteLine($"PASS: {endpoint} {utcSuffix} input retained {recorder.LastStartTime:O} through HTTP, CAS packet and recording.");
+        }
         // Equivalent offsets must encode the same instant, without a six-hour shift.
         foreach (var offset in new[] { TimeSpan.FromHours(6), TimeSpan.FromHours(-5), TimeSpan.FromMinutes(345) })
             await Exchange(0, prefix + "000", requestBody: MakeRequest(start: startTime.ToOffset(offset), end: endTime.ToOffset(offset)));

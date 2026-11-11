@@ -174,6 +174,8 @@ foreach (bool unauthorize in new[] { false, true })
     Console.WriteLine($"PASS: {authorizationChecks} assertions across {(unauthorize ? "UnAuthorize" : "Authorize")} HTTP, CAS packet, validation, transport, and persistence scenarios.");
 }
 int clearChecks = await ClearAuthorizationChecks.RunAsync(http, casOptions, recorder);
+int queryTimeChecks = await QueryAuthorizationTimeChecks.RunAsync(http, casOptions, recorder);
+Console.WriteLine($"PASS: {queryTimeChecks} assertions across QueryAuthorization UTC/local begin and end times, midnight rollover, packet preservation, and recording.");
 Console.WriteLine($"PASS: {clearChecks} assertions across ClearAuthorization HTTP, CAS packet, validation, transport, and persistence scenarios.");
 foreach (int terminalStatus in new[] { 0, 1 })
 {
@@ -190,6 +192,8 @@ sealed class RecordingStub : ISvCardOperationRecorder
 {
     public int Count { get; private set; }
     public string? LastJson { get; private set; }
+    public DateTimeOffset? LastStartTime { get; private set; }
+    public DateTimeOffset? LastEndTime { get; private set; }
     public SvCardStatusEnum LastStatus { get; private set; }
     public bool ThrowOnSave { get; set; }
     public SvCardStatusEnum? FailingStatus { get; set; }
@@ -203,6 +207,8 @@ sealed class RecordingStub : ISvCardOperationRecorder
         Records.Add((status, responseJson));
         Count++;
         LastJson = responseJson;
+        LastStartTime = startTime;
+        LastEndTime = endTime;
         LastStatus = status;
         return Task.CompletedTask;
     }

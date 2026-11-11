@@ -54,3 +54,16 @@ If recording fails after CAS success, the existing HTTP 500 envelope and its Suc
 HSCAS section 4.3 distinguishes authorization (begin < end) from un-authorization (begin >= end). Query classification uses this rule instead of ReturnAmount alone. Raw ReturnAmount, Authorizations, and hex fields are unchanged, including retained un-authorization records. Mixed responses use QA000 if any authorization period exists. QA000 does not guarantee a currently active entitlement: future and expired periods must be evaluated against the current time.
 
 Each authorization record also includes authorizationStatus: Authorized when beginUtc < endUtc; Unauthorized when beginUtc >= endUtc. All existing fields remain. This identifies the record type, not whether it is currently active. Saved ResponseJson for new successful queries includes this field; historical JSON is unchanged.
+
+Each record exposes both ends of the period in Bangladesh time:
+
+- `beginLocal`: the start time with an explicit `+06:00` offset.
+- `endLocal`: the end time with an explicit `+06:00` offset.
+
+`beginUtc`, `endUtc`, `beginHex`, and `endHex` retain their existing meanings and
+values. Local fields represent the same instants, not an adjustment to the CAS
+authorization period. For example, `2027-11-07T17:59:59+00:00` is returned as
+`2027-11-07T23:59:59+06:00` in `endLocal`. UTC `2027-11-07T23:59:59+00:00`
+is Bangladesh `2027-11-08T05:59:59+06:00`, including the date rollover.
+Clients may consume either pair; do not add another six hours to the local fields.
+New saved query ResponseJson includes both local fields; historical JSON is unchanged.
